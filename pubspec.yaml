@@ -1,0 +1,15 @@
+name: gym_workspace
+environment:
+  sdk: '^3.11.4'
+
+workspace:
+  - apps/gym_app
+  - packages/core_ui
+  - packages/sdui
+  - packages/data
+  - packages/domain
+  - packages/features/auth
+  - packages/features/workout
+  - packages/features/admin
+dependencies:
+  firebase_core: ^3.15.2
