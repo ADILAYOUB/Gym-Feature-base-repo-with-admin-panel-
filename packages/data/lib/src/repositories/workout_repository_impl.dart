@@ -1,33 +1,64 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:domain/domain.dart';
 
 class WorkoutRepositoryImpl implements WorkoutRepository {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _firestoreOverride;
+  final List<Workout> _localWorkouts = [];
+  final List<Exercise> _localExercises = [];
+  late final StreamController<List<Workout>> _workoutStreamController;
+  late final StreamController<List<Exercise>> _exerciseStreamController;
 
   WorkoutRepositoryImpl({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+      : _firestoreOverride = firestore {
+    _workoutStreamController = StreamController<List<Workout>>.broadcast();
+    _exerciseStreamController = StreamController<List<Exercise>>.broadcast();
+    _localExercises.addAll(_defaultExercises());
+    _localWorkouts.addAll(_defaultWorkouts());
+  }
+
+  FirebaseFirestore? get _firestore {
+    if (_firestoreOverride != null) return _firestoreOverride;
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        return FirebaseFirestore.instance;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   @override
   Stream<List<Workout>> getWorkoutsStream() {
-    return _firestore.collection('workouts').snapshots().map((snapshot) {
-      if (snapshot.docs.isEmpty) {
-        return _defaultWorkouts();
-      }
-      return snapshot.docs.map((doc) => Workout.fromJson(doc.data(), doc.id)).toList();
-    });
+    final fs = _firestore;
+    if (fs == null) {
+      return _localWorkoutStream();
+    }
+    try {
+      return fs.collection('workouts').snapshots().map((snapshot) {
+        if (snapshot.docs.isEmpty) {
+          return List<Workout>.from(_localWorkouts);
+        }
+        final list = snapshot.docs.map((doc) => Workout.fromJson(doc.data(), doc.id)).toList();
+        _localWorkouts.clear();
+        _localWorkouts.addAll(list);
+        return list;
+      }).handleError((_) => List<Workout>.from(_localWorkouts));
+    } catch (_) {
+      return _localWorkoutStream();
+    }
+  }
+
+  Stream<List<Workout>> _localWorkoutStream() async* {
+    yield List<Workout>.from(_localWorkouts);
+    yield* _workoutStreamController.stream;
   }
 
   @override
   Stream<List<Workout>> getWorkoutsByCategoryStream(String category) {
-    return _firestore
-        .collection('workouts')
-        .where('category', isEqualTo: category.toLowerCase())
-        .snapshots()
-        .map((snapshot) {
-      if (snapshot.docs.isEmpty) {
-        return _defaultWorkouts().where((w) => w.category == category.toLowerCase()).toList();
-      }
-      return snapshot.docs.map((doc) => Workout.fromJson(doc.data(), doc.id)).toList();
+    final cat = category.toLowerCase();
+    return getWorkoutsStream().map((list) {
+      return list.where((w) => w.category.toLowerCase() == cat).toList();
     });
   }
 
@@ -38,27 +69,104 @@ class WorkoutRepositoryImpl implements WorkoutRepository {
 
   @override
   Stream<List<Exercise>> getExercisesStream() {
-    return _firestore.collection('exercises').snapshots().map((snapshot) {
-      if (snapshot.docs.isEmpty) {
-        return _defaultExercises();
-      }
-      return snapshot.docs.map((doc) => Exercise.fromJson(doc.data(), doc.id)).toList();
-    });
+    final fs = _firestore;
+    if (fs == null) {
+      return _localExerciseStream();
+    }
+    try {
+      return fs.collection('exercises').snapshots().map((snapshot) {
+        if (snapshot.docs.isEmpty) {
+          return List<Exercise>.from(_localExercises);
+        }
+        final list = snapshot.docs.map((doc) => Exercise.fromJson(doc.data(), doc.id)).toList();
+        _localExercises.clear();
+        _localExercises.addAll(list);
+        return list;
+      }).handleError((_) => List<Exercise>.from(_localExercises));
+    } catch (_) {
+      return _localExerciseStream();
+    }
+  }
+
+  Stream<List<Exercise>> _localExerciseStream() async* {
+    yield List<Exercise>.from(_localExercises);
+    yield* _exerciseStreamController.stream;
+  }
+
+  void _notifyWorkouts() {
+    if (!_workoutStreamController.isClosed) {
+      _workoutStreamController.add(List<Workout>.from(_localWorkouts));
+    }
+  }
+
+  void _notifyExercises() {
+    if (!_exerciseStreamController.isClosed) {
+      _exerciseStreamController.add(List<Exercise>.from(_localExercises));
+    }
   }
 
   @override
   Future<void> addWorkout(Workout workout) async {
-    await _firestore.collection('workouts').add(workout.toJson());
+    final newWorkout = Workout(
+      id: workout.id.isEmpty ? 'w-${DateTime.now().millisecondsSinceEpoch}' : workout.id,
+      title: workout.title,
+      description: workout.description,
+      category: workout.category,
+      duration: workout.duration,
+      difficulty: workout.difficulty,
+      imageUrl: workout.imageUrl.isEmpty ? 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?q=80&w=600' : workout.imageUrl,
+      exercises: workout.exercises,
+      exerciseDetails: workout.exerciseDetails,
+    );
+
+    _localWorkouts.insert(0, newWorkout);
+    _notifyWorkouts();
+
+    final fs = _firestore;
+    if (fs != null) {
+      try {
+        await fs.collection('workouts').add(newWorkout.toJson());
+      } catch (_) {}
+    }
   }
 
   @override
   Future<void> deleteWorkout(String id) async {
-    await _firestore.collection('workouts').doc(id).delete();
+    _localWorkouts.removeWhere((w) => w.id == id);
+    _notifyWorkouts();
+
+    final fs = _firestore;
+    if (fs != null) {
+      try {
+        await fs.collection('workouts').doc(id).delete();
+      } catch (_) {}
+    }
   }
 
   @override
   Future<void> addExercise(Exercise exercise) async {
-    await _firestore.collection('exercises').add(exercise.toJson());
+    final newExercise = Exercise(
+      id: exercise.id.isEmpty ? 'ex-${DateTime.now().millisecondsSinceEpoch}' : exercise.id,
+      name: exercise.name,
+      category: exercise.category,
+      targetMuscle: exercise.targetMuscle,
+      equipment: exercise.equipment,
+      videoUrl: exercise.videoUrl,
+      thumbnailUrl: exercise.thumbnailUrl.isEmpty ? 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?q=80&w=400' : exercise.thumbnailUrl,
+      instructions: exercise.instructions,
+      defaultSets: exercise.defaultSets,
+      defaultReps: exercise.defaultReps,
+    );
+
+    _localExercises.insert(0, newExercise);
+    _notifyExercises();
+
+    final fs = _firestore;
+    if (fs != null) {
+      try {
+        await fs.collection('exercises').add(newExercise.toJson());
+      } catch (_) {}
+    }
   }
 
   List<Workout> _defaultWorkouts() {
@@ -71,8 +179,8 @@ class WorkoutRepositoryImpl implements WorkoutRepository {
         duration: '45 min',
         difficulty: 'intermediate',
         imageUrl: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?q=80&w=600',
-        exercises: ['Push-ups', 'Dumbbell Bench Press', 'Tricep Dips', 'Overhead Press'],
-        exerciseDetails: _defaultExercises().where((e) => e.category == 'men').toList(),
+        exercises: const ['Push-ups', 'Dumbbell Bench Press', 'Tricep Dips', 'Overhead Press'],
+        exerciseDetails: _localExercises.where((e) => e.category == 'men').toList(),
       ),
       Workout(
         id: 'w2',
@@ -82,8 +190,8 @@ class WorkoutRepositoryImpl implements WorkoutRepository {
         duration: '35 min',
         difficulty: 'beginner',
         imageUrl: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?q=80&w=600',
-        exercises: ['Glute Bridges', 'Plank Hold', 'Mountain Climbers', 'Squat Pulses'],
-        exerciseDetails: _defaultExercises().where((e) => e.category == 'women').toList(),
+        exercises: const ['Glute Bridges', 'Plank Hold', 'Mountain Climbers', 'Squat Pulses'],
+        exerciseDetails: _localExercises.where((e) => e.category == 'women').toList(),
       ),
       Workout(
         id: 'w3',
@@ -93,8 +201,8 @@ class WorkoutRepositoryImpl implements WorkoutRepository {
         duration: '25 min',
         difficulty: 'beginner',
         imageUrl: 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?q=80&w=600',
-        exercises: ['Jumping Jacks', 'Frog Jumps', 'Bear Crawls', 'Single-leg Balance'],
-        exerciseDetails: _defaultExercises().where((e) => e.category == 'children').toList(),
+        exercises: const ['Jumping Jacks', 'Frog Jumps', 'Bear Crawls', 'Single-leg Balance'],
+        exerciseDetails: _localExercises.where((e) => e.category == 'children').toList(),
       ),
     ];
   }

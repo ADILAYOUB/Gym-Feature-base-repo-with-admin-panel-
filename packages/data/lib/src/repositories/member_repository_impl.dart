@@ -1,35 +1,115 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:domain/domain.dart';
 
 class MemberRepositoryImpl implements MemberRepository {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _firestoreOverride;
+  final List<Member> _localMembers = [];
+  late final StreamController<List<Member>> _streamController;
 
   MemberRepositoryImpl({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+      : _firestoreOverride = firestore {
+    _streamController = StreamController<List<Member>>.broadcast();
+    _localMembers.addAll(_defaultMembers());
+  }
+
+  FirebaseFirestore? get _firestore {
+    if (_firestoreOverride != null) return _firestoreOverride;
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        return FirebaseFirestore.instance;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   @override
   Stream<List<Member>> getMembersStream() {
-    return _firestore.collection('members').snapshots().map((snapshot) {
-      if (snapshot.docs.isEmpty) {
-        return _defaultMembers();
-      }
-      return snapshot.docs.map((doc) => Member.fromJson(doc.data(), doc.id)).toList();
-    });
+    final fs = _firestore;
+    if (fs == null) {
+      return _localStream();
+    }
+    try {
+      return fs.collection('members').snapshots().map((snapshot) {
+        if (snapshot.docs.isEmpty) {
+          return List<Member>.from(_localMembers);
+        }
+        final list = snapshot.docs.map((doc) => Member.fromJson(doc.data(), doc.id)).toList();
+        _localMembers.clear();
+        _localMembers.addAll(list);
+        return list;
+      }).handleError((_) => List<Member>.from(_localMembers));
+    } catch (_) {
+      return _localStream();
+    }
+  }
+
+  Stream<List<Member>> _localStream() async* {
+    yield List<Member>.from(_localMembers);
+    yield* _streamController.stream;
+  }
+
+  void _notify() {
+    if (!_streamController.isClosed) {
+      _streamController.add(List<Member>.from(_localMembers));
+    }
   }
 
   @override
   Future<void> addMember(Member member) async {
-    await _firestore.collection('members').add(member.toJson());
+    final newMember = Member(
+      id: member.id.isEmpty ? 'M-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}' : member.id,
+      name: member.name,
+      email: member.email,
+      photoUrl: member.photoUrl.isEmpty ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200' : member.photoUrl,
+      packageTier: member.packageTier,
+      joiningDate: member.joiningDate,
+      expireDate: member.expireDate,
+      paidAmount: member.paidAmount,
+      dueAmount: member.dueAmount,
+      status: member.status,
+      qrCode: member.qrCode.isEmpty ? 'GYM-PASS-${DateTime.now().millisecondsSinceEpoch}' : member.qrCode,
+    );
+
+    _localMembers.insert(0, newMember);
+    _notify();
+
+    final fs = _firestore;
+    if (fs != null) {
+      try {
+        await fs.collection('members').add(newMember.toJson());
+      } catch (_) {}
+    }
   }
 
   @override
   Future<void> updateMember(Member member) async {
-    await _firestore.collection('members').doc(member.id).set(member.toJson(), SetOptions(merge: true));
+    final index = _localMembers.indexWhere((m) => m.id == member.id);
+    if (index != -1) {
+      _localMembers[index] = member;
+      _notify();
+    }
+
+    final fs = _firestore;
+    if (fs != null) {
+      try {
+        await fs.collection('members').doc(member.id).set(member.toJson(), SetOptions(merge: true));
+      } catch (_) {}
+    }
   }
 
   @override
   Future<void> deleteMember(String id) async {
-    await _firestore.collection('members').doc(id).delete();
+    _localMembers.removeWhere((m) => m.id == id);
+    _notify();
+
+    final fs = _firestore;
+    if (fs != null) {
+      try {
+        await fs.collection('members').doc(id).delete();
+      } catch (_) {}
+    }
   }
 
   List<Member> _defaultMembers() {
@@ -65,24 +145,77 @@ class MemberRepositoryImpl implements MemberRepository {
 }
 
 class SubscriptionRepositoryImpl implements SubscriptionRepository {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _firestoreOverride;
+  final List<SubscriptionTier> _localTiers = [];
+  late final StreamController<List<SubscriptionTier>> _streamController;
 
   SubscriptionRepositoryImpl({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+      : _firestoreOverride = firestore {
+    _streamController = StreamController<List<SubscriptionTier>>.broadcast();
+    _localTiers.addAll(_defaultTiers());
+  }
+
+  FirebaseFirestore? get _firestore {
+    if (_firestoreOverride != null) return _firestoreOverride;
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        return FirebaseFirestore.instance;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   @override
   Stream<List<SubscriptionTier>> getSubscriptionsStream() {
-    return _firestore.collection('subscriptions').snapshots().map((snapshot) {
-      if (snapshot.docs.isEmpty) {
-        return _defaultTiers();
-      }
-      return snapshot.docs.map((doc) => SubscriptionTier.fromJson(doc.data(), doc.id)).toList();
-    });
+    final fs = _firestore;
+    if (fs == null) {
+      return _localStream();
+    }
+    try {
+      return fs.collection('subscriptions').snapshots().map((snapshot) {
+        if (snapshot.docs.isEmpty) {
+          return List<SubscriptionTier>.from(_localTiers);
+        }
+        final list = snapshot.docs.map((doc) => SubscriptionTier.fromJson(doc.data(), doc.id)).toList();
+        _localTiers.clear();
+        _localTiers.addAll(list);
+        return list;
+      }).handleError((_) => List<SubscriptionTier>.from(_localTiers));
+    } catch (_) {
+      return _localStream();
+    }
+  }
+
+  Stream<List<SubscriptionTier>> _localStream() async* {
+    yield List<SubscriptionTier>.from(_localTiers);
+    yield* _streamController.stream;
+  }
+
+  void _notify() {
+    if (!_streamController.isClosed) {
+      _streamController.add(List<SubscriptionTier>.from(_localTiers));
+    }
   }
 
   @override
   Future<void> addSubscriptionTier(SubscriptionTier tier) async {
-    await _firestore.collection('subscriptions').add(tier.toJson());
+    final newTier = SubscriptionTier(
+      id: tier.id.isEmpty ? 'sub-${DateTime.now().millisecondsSinceEpoch}' : tier.id,
+      name: tier.name,
+      price: tier.price,
+      durationMonths: tier.durationMonths,
+      features: tier.features,
+    );
+
+    _localTiers.add(newTier);
+    _notify();
+
+    final fs = _firestore;
+    if (fs != null) {
+      try {
+        await fs.collection('subscriptions').add(newTier.toJson());
+      } catch (_) {}
+    }
   }
 
   List<SubscriptionTier> _defaultTiers() {

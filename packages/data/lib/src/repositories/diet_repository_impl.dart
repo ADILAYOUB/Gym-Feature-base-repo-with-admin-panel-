@@ -1,30 +1,97 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:domain/domain.dart';
 
 class DietRepositoryImpl implements DietRepository {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _firestoreOverride;
+  final List<DietPlan> _localDietPlans = [];
+  late final StreamController<List<DietPlan>> _streamController;
 
   DietRepositoryImpl({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+      : _firestoreOverride = firestore {
+    _streamController = StreamController<List<DietPlan>>.broadcast();
+    _localDietPlans.addAll(_defaultDietPlans());
+  }
+
+  FirebaseFirestore? get _firestore {
+    if (_firestoreOverride != null) return _firestoreOverride;
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        return FirebaseFirestore.instance;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   @override
   Stream<List<DietPlan>> getDietPlansStream() {
-    return _firestore.collection('diet_plans').snapshots().map((snapshot) {
-      if (snapshot.docs.isEmpty) {
-        return _defaultDietPlans();
-      }
-      return snapshot.docs.map((doc) => DietPlan.fromJson(doc.data(), doc.id)).toList();
-    });
+    final fs = _firestore;
+    if (fs == null) {
+      return _localStream();
+    }
+    try {
+      return fs.collection('diet_plans').snapshots().map((snapshot) {
+        if (snapshot.docs.isEmpty) {
+          return List<DietPlan>.from(_localDietPlans);
+        }
+        final list = snapshot.docs.map((doc) => DietPlan.fromJson(doc.data(), doc.id)).toList();
+        _localDietPlans.clear();
+        _localDietPlans.addAll(list);
+        return list;
+      }).handleError((_) => List<DietPlan>.from(_localDietPlans));
+    } catch (_) {
+      return _localStream();
+    }
+  }
+
+  Stream<List<DietPlan>> _localStream() async* {
+    yield List<DietPlan>.from(_localDietPlans);
+    yield* _streamController.stream;
+  }
+
+  void _notify() {
+    if (!_streamController.isClosed) {
+      _streamController.add(List<DietPlan>.from(_localDietPlans));
+    }
   }
 
   @override
   Future<void> addDietPlan(DietPlan plan) async {
-    await _firestore.collection('diet_plans').add(plan.toJson());
+    final newPlan = DietPlan(
+      id: plan.id.isEmpty ? 'diet-${DateTime.now().millisecondsSinceEpoch}' : plan.id,
+      title: plan.title,
+      targetCategory: plan.targetCategory,
+      caloriesDaily: plan.caloriesDaily,
+      proteinGrams: plan.proteinGrams,
+      carbsGrams: plan.carbsGrams,
+      fatsGrams: plan.fatsGrams,
+      description: plan.description,
+      meals: plan.meals,
+    );
+
+    _localDietPlans.insert(0, newPlan);
+    _notify();
+
+    final fs = _firestore;
+    if (fs != null) {
+      try {
+        await fs.collection('diet_plans').add(newPlan.toJson());
+      } catch (_) {}
+    }
   }
 
   @override
   Future<void> deleteDietPlan(String id) async {
-    await _firestore.collection('diet_plans').doc(id).delete();
+    _localDietPlans.removeWhere((d) => d.id == id);
+    _notify();
+
+    final fs = _firestore;
+    if (fs != null) {
+      try {
+        await fs.collection('diet_plans').doc(id).delete();
+      } catch (_) {}
+    }
   }
 
   List<DietPlan> _defaultDietPlans() {
@@ -75,74 +142,134 @@ class DietRepositoryImpl implements DietRepository {
 }
 
 class NutritionLogRepositoryImpl implements NutritionLogRepository {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _firestoreOverride;
+  late NutritionLog _localLog;
+  late final StreamController<NutritionLog> _streamController;
 
   NutritionLogRepositoryImpl({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+      : _firestoreOverride = firestore {
+    _streamController = StreamController<NutritionLog>.broadcast();
+    _localLog = NutritionLog(
+      id: 'default',
+      userId: 'default',
+      date: DateTime.now(),
+      waterIntakeMl: 1250,
+      waterGoalMl: 2500,
+      caloriesConsumed: 1650,
+      calorieGoal: 2400,
+    );
+  }
+
+  FirebaseFirestore? get _firestore {
+    if (_firestoreOverride != null) return _firestoreOverride;
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        return FirebaseFirestore.instance;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   @override
   Stream<NutritionLog> getTodayNutritionLogStream(String userId) {
-    return _firestore
-        .collection('nutrition_logs')
-        .doc(userId)
-        .snapshots()
-        .map((doc) {
-      if (!doc.exists || doc.data() == null) {
-        return NutritionLog(
-          id: userId,
-          userId: userId,
-          date: DateTime.now(),
-          waterIntakeMl: 1250,
-          waterGoalMl: 2500,
-          caloriesConsumed: 1650,
-          calorieGoal: 2400,
-        );
-      }
-      return NutritionLog.fromJson(doc.data()!, doc.id);
-    });
+    final fs = _firestore;
+    if (fs == null) {
+      return _localStream();
+    }
+    try {
+      return fs
+          .collection('nutrition_logs')
+          .doc(userId)
+          .snapshots()
+          .map((doc) {
+        if (!doc.exists || doc.data() == null) {
+          return _localLog;
+        }
+        return NutritionLog.fromJson(doc.data()!, doc.id);
+      }).handleError((_) => _localLog);
+    } catch (_) {
+      return _localStream();
+    }
+  }
+
+  Stream<NutritionLog> _localStream() async* {
+    yield _localLog;
+    yield* _streamController.stream;
   }
 
   @override
   Future<void> logWaterIntake(String userId, int addedMl) async {
-    final ref = _firestore.collection('nutrition_logs').doc(userId);
-    await _firestore.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      if (!snap.exists) {
-        tx.set(ref, {
-          'id': userId,
-          'userId': userId,
-          'date': DateTime.now().toIso8601String(),
-          'waterIntakeMl': addedMl,
-          'waterGoalMl': 2500,
-          'caloriesConsumed': 1650,
-          'calorieGoal': 2400,
+    _localLog = NutritionLog(
+      id: _localLog.id,
+      userId: userId,
+      date: DateTime.now(),
+      waterIntakeMl: _localLog.waterIntakeMl + addedMl,
+      waterGoalMl: _localLog.waterGoalMl,
+      caloriesConsumed: _localLog.caloriesConsumed,
+      calorieGoal: _localLog.calorieGoal,
+    );
+    _streamController.add(_localLog);
+
+    final fs = _firestore;
+    if (fs != null) {
+      try {
+        final ref = fs.collection('nutrition_logs').doc(userId);
+        await fs.runTransaction((tx) async {
+          final snap = await tx.get(ref);
+          if (!snap.exists) {
+            tx.set(ref, {
+              'id': userId,
+              'userId': userId,
+              'date': DateTime.now().toIso8601String(),
+              'waterIntakeMl': addedMl,
+              'waterGoalMl': 2500,
+              'caloriesConsumed': 1650,
+              'calorieGoal': 2400,
+            });
+          } else {
+            final current = (snap.data()?['waterIntakeMl'] as num?)?.toInt() ?? 1250;
+            tx.update(ref, {'waterIntakeMl': current + addedMl});
+          }
         });
-      } else {
-        final current = (snap.data()?['waterIntakeMl'] as num?)?.toInt() ?? 1250;
-        tx.update(ref, {'waterIntakeMl': current + addedMl});
-      }
-    });
+      } catch (_) {}
+    }
   }
 
   @override
   Future<void> logMealCalories(String userId, int addedCalories) async {
-    final ref = _firestore.collection('nutrition_logs').doc(userId);
-    await _firestore.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      if (!snap.exists) {
-        tx.set(ref, {
-          'id': userId,
-          'userId': userId,
-          'date': DateTime.now().toIso8601String(),
-          'waterIntakeMl': 1250,
-          'waterGoalMl': 2500,
-          'caloriesConsumed': addedCalories,
-          'calorieGoal': 2400,
+    _localLog = NutritionLog(
+      id: _localLog.id,
+      userId: userId,
+      date: DateTime.now(),
+      waterIntakeMl: _localLog.waterIntakeMl,
+      waterGoalMl: _localLog.waterGoalMl,
+      caloriesConsumed: _localLog.caloriesConsumed + addedCalories,
+      calorieGoal: _localLog.calorieGoal,
+    );
+    _streamController.add(_localLog);
+
+    final fs = _firestore;
+    if (fs != null) {
+      try {
+        final ref = fs.collection('nutrition_logs').doc(userId);
+        await fs.runTransaction((tx) async {
+          final snap = await tx.get(ref);
+          if (!snap.exists) {
+            tx.set(ref, {
+              'id': userId,
+              'userId': userId,
+              'date': DateTime.now().toIso8601String(),
+              'waterIntakeMl': 1250,
+              'waterGoalMl': 2500,
+              'caloriesConsumed': addedCalories,
+              'calorieGoal': 2400,
+            });
+          } else {
+            final current = (snap.data()?['caloriesConsumed'] as num?)?.toInt() ?? 1650;
+            tx.update(ref, {'caloriesConsumed': current + addedCalories});
+          }
         });
-      } else {
-        final current = (snap.data()?['caloriesConsumed'] as num?)?.toInt() ?? 1650;
-        tx.update(ref, {'caloriesConsumed': current + addedCalories});
-      }
-    });
+      } catch (_) {}
+    }
   }
 }

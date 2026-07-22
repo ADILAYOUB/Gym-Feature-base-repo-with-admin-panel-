@@ -1,68 +1,222 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:domain/domain.dart';
 
 class CommunityRepositoryImpl implements CommunityRepository {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _firestoreOverride;
+  final List<LeaderboardEntry> _localLeaderboard = [];
+  final List<VirtualChallenge> _localChallenges = [];
+  final List<SocialPost> _localPosts = [];
+
+  late final StreamController<List<LeaderboardEntry>> _leaderboardController;
+  late final StreamController<List<VirtualChallenge>> _challengeController;
+  late final StreamController<List<SocialPost>> _postController;
 
   CommunityRepositoryImpl({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+      : _firestoreOverride = firestore {
+    _leaderboardController = StreamController<List<LeaderboardEntry>>.broadcast();
+    _challengeController = StreamController<List<VirtualChallenge>>.broadcast();
+    _postController = StreamController<List<SocialPost>>.broadcast();
+
+    _localLeaderboard.addAll(_defaultLeaderboard());
+    _localChallenges.addAll(_defaultChallenges());
+    _localPosts.addAll(_defaultPosts());
+  }
+
+  FirebaseFirestore? get _firestore {
+    if (_firestoreOverride != null) return _firestoreOverride;
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        return FirebaseFirestore.instance;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   @override
   Stream<List<LeaderboardEntry>> getLeaderboardStream() {
-    return _firestore
-        .collection('leaderboard')
-        .orderBy('points', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      if (snapshot.docs.isEmpty) {
-        return _defaultLeaderboard();
-      }
-      return snapshot.docs.map((doc) => LeaderboardEntry.fromJson(doc.data())).toList();
-    });
+    final fs = _firestore;
+    if (fs == null) return _localLeaderboardStream();
+    try {
+      return fs
+          .collection('leaderboard')
+          .orderBy('points', descending: true)
+          .snapshots()
+          .map((snapshot) {
+        if (snapshot.docs.isEmpty) return List<LeaderboardEntry>.from(_localLeaderboard);
+        final list = snapshot.docs.map((doc) => LeaderboardEntry.fromJson(doc.data())).toList();
+        _localLeaderboard.clear();
+        _localLeaderboard.addAll(list);
+        return list;
+      }).handleError((_) => List<LeaderboardEntry>.from(_localLeaderboard));
+    } catch (_) {
+      return _localLeaderboardStream();
+    }
+  }
+
+  Stream<List<LeaderboardEntry>> _localLeaderboardStream() async* {
+    yield List<LeaderboardEntry>.from(_localLeaderboard);
+    yield* _leaderboardController.stream;
   }
 
   @override
   Stream<List<VirtualChallenge>> getChallengesStream() {
-    return _firestore.collection('challenges').snapshots().map((snapshot) {
-      if (snapshot.docs.isEmpty) {
-        return _defaultChallenges();
-      }
-      return snapshot.docs.map((doc) => VirtualChallenge.fromJson(doc.data(), doc.id)).toList();
-    });
+    final fs = _firestore;
+    if (fs == null) return _localChallengeStream();
+    try {
+      return fs.collection('challenges').snapshots().map((snapshot) {
+        if (snapshot.docs.isEmpty) return List<VirtualChallenge>.from(_localChallenges);
+        final list = snapshot.docs.map((doc) => VirtualChallenge.fromJson(doc.data(), doc.id)).toList();
+        _localChallenges.clear();
+        _localChallenges.addAll(list);
+        return list;
+      }).handleError((_) => List<VirtualChallenge>.from(_localChallenges));
+    } catch (_) {
+      return _localChallengeStream();
+    }
+  }
+
+  Stream<List<VirtualChallenge>> _localChallengeStream() async* {
+    yield List<VirtualChallenge>.from(_localChallenges);
+    yield* _challengeController.stream;
   }
 
   @override
   Stream<List<SocialPost>> getSocialPostsStream() {
-    return _firestore.collection('social_posts').snapshots().map((snapshot) {
-      if (snapshot.docs.isEmpty) {
-        return _defaultPosts();
-      }
-      return snapshot.docs.map((doc) => SocialPost.fromJson(doc.data(), doc.id)).toList();
-    });
+    final fs = _firestore;
+    if (fs == null) return _localPostStream();
+    try {
+      return fs.collection('social_posts').snapshots().map((snapshot) {
+        if (snapshot.docs.isEmpty) return List<SocialPost>.from(_localPosts);
+        final list = snapshot.docs.map((doc) => SocialPost.fromJson(doc.data(), doc.id)).toList();
+        _localPosts.clear();
+        _localPosts.addAll(list);
+        return list;
+      }).handleError((_) => List<SocialPost>.from(_localPosts));
+    } catch (_) {
+      return _localPostStream();
+    }
+  }
+
+  Stream<List<SocialPost>> _localPostStream() async* {
+    yield List<SocialPost>.from(_localPosts);
+    yield* _postController.stream;
   }
 
   @override
   Future<void> addChallenge(VirtualChallenge challenge) async {
-    await _firestore.collection('challenges').add(challenge.toJson());
+    final newChallenge = VirtualChallenge(
+      id: challenge.id.isEmpty ? 'c-${DateTime.now().millisecondsSinceEpoch}' : challenge.id,
+      title: challenge.title,
+      description: challenge.description,
+      targetType: challenge.targetType,
+      targetAmount: challenge.targetAmount,
+      currentAmount: challenge.currentAmount,
+      daysLeft: challenge.daysLeft,
+      imageUrl: challenge.imageUrl.isEmpty ? 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=600' : challenge.imageUrl,
+      participantsCount: challenge.participantsCount,
+      rewardBadge: challenge.rewardBadge,
+      isJoined: challenge.isJoined,
+    );
+
+    _localChallenges.insert(0, newChallenge);
+    _challengeController.add(List<VirtualChallenge>.from(_localChallenges));
+
+    final fs = _firestore;
+    if (fs != null) {
+      try {
+        await fs.collection('challenges').add(newChallenge.toJson());
+      } catch (_) {}
+    }
   }
 
   @override
   Future<void> toggleChallengeJoin(String challengeId, bool join) async {
-    await _firestore.collection('challenges').doc(challengeId).update({'isJoined': join});
+    final idx = _localChallenges.indexWhere((c) => c.id == challengeId);
+    if (idx != -1) {
+      final old = _localChallenges[idx];
+      _localChallenges[idx] = VirtualChallenge(
+        id: old.id,
+        title: old.title,
+        description: old.description,
+        targetType: old.targetType,
+        targetAmount: old.targetAmount,
+        currentAmount: old.currentAmount,
+        daysLeft: old.daysLeft,
+        imageUrl: old.imageUrl,
+        participantsCount: join ? old.participantsCount + 1 : old.participantsCount - 1,
+        rewardBadge: old.rewardBadge,
+        isJoined: join,
+      );
+      _challengeController.add(List<VirtualChallenge>.from(_localChallenges));
+    }
+
+    final fs = _firestore;
+    if (fs != null) {
+      try {
+        await fs.collection('challenges').doc(challengeId).update({'isJoined': join});
+      } catch (_) {}
+    }
   }
 
   @override
   Future<void> togglePostLike(String postId, bool isLiked, int currentLikes) async {
-    final nextCount = isLiked ? currentLikes - 1 : currentLikes + 1;
-    await _firestore.collection('social_posts').doc(postId).update({
-      'isLikedByMe': !isLiked,
-      'likesCount': nextCount > 0 ? nextCount : 0,
-    });
+    final idx = _localPosts.indexWhere((p) => p.id == postId);
+    if (idx != -1) {
+      final old = _localPosts[idx];
+      final nextCount = isLiked ? currentLikes - 1 : currentLikes + 1;
+      _localPosts[idx] = SocialPost(
+        id: old.id,
+        userName: old.userName,
+        userAvatar: old.userAvatar,
+        timestampAgo: old.timestampAgo,
+        caption: old.caption,
+        postImageUrl: old.postImageUrl,
+        likesCount: nextCount > 0 ? nextCount : 0,
+        commentsCount: old.commentsCount,
+        isLikedByMe: !isLiked,
+        userBadge: old.userBadge,
+      );
+      _postController.add(List<SocialPost>.from(_localPosts));
+    }
+
+    final fs = _firestore;
+    if (fs != null) {
+      try {
+        final nextCount = isLiked ? currentLikes - 1 : currentLikes + 1;
+        await fs.collection('social_posts').doc(postId).update({
+          'isLikedByMe': !isLiked,
+          'likesCount': nextCount > 0 ? nextCount : 0,
+        });
+      } catch (_) {}
+    }
   }
 
   @override
   Future<void> createSocialPost(SocialPost post) async {
-    await _firestore.collection('social_posts').add(post.toJson());
+    final newPost = SocialPost(
+      id: post.id.isEmpty ? 'p-${DateTime.now().millisecondsSinceEpoch}' : post.id,
+      userName: post.userName,
+      userAvatar: post.userAvatar,
+      timestampAgo: 'Just now',
+      caption: post.caption,
+      postImageUrl: post.postImageUrl,
+      likesCount: post.likesCount,
+      commentsCount: post.commentsCount,
+      isLikedByMe: post.isLikedByMe,
+      userBadge: post.userBadge,
+    );
+
+    _localPosts.insert(0, newPost);
+    _postController.add(List<SocialPost>.from(_localPosts));
+
+    final fs = _firestore;
+    if (fs != null) {
+      try {
+        await fs.collection('social_posts').add(newPost.toJson());
+      } catch (_) {}
+    }
   }
 
   List<LeaderboardEntry> _defaultLeaderboard() {
@@ -99,8 +253,8 @@ class CommunityRepositoryImpl implements CommunityRepository {
         currentAmount: 48500,
         daysLeft: 20,
         imageUrl: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?q=80&w=600',
-        participantsCount: 98,
-        rewardBadge: 'Iron Lifter 🏋️‍♂️',
+        participantsCount: 89,
+        rewardBadge: 'Heavy Metal 🏋️‍♂️',
         isJoined: false,
       ),
     ];
@@ -110,25 +264,27 @@ class CommunityRepositoryImpl implements CommunityRepository {
     return const [
       SocialPost(
         id: 'p1',
-        authorName: 'Alex Rivera',
-        authorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-        postedTimeAgo: '1h ago',
-        workoutTitle: 'Men Upper Body Strength',
-        metricsText: '4,200 KG Lifted • 48 Mins • 480 kcal',
-        caption: 'Crushed a new Personal Record on Dumbbell Press! 30kg x 12 reps! 💪🔥',
-        likesCount: 38,
+        userName: 'Alex Rivera',
+        userAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
+        timestampAgo: '2 hours ago',
+        caption: 'Hit a new PR today on Deadlifts! 220KG for 3 smooth reps. Hard work in FitFlow routine paying off! 🔥💪',
+        postImageUrl: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=600',
+        likesCount: 34,
+        commentsCount: 12,
         isLikedByMe: true,
+        userBadge: '🏆 Gym Champion',
       ),
       SocialPost(
         id: 'p2',
-        authorName: 'Sophia Chen',
-        authorAvatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=200',
-        postedTimeAgo: '3h ago',
-        workoutTitle: 'Women Toned Core & Glutes',
-        metricsText: '2,100 KG Lifted • 35 Mins • 320 kcal',
-        caption: 'Glute bridge burnout session complete! Hydration on point today 💦',
-        likesCount: 29,
+        userName: 'Sophia Chen',
+        userAvatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=200',
+        timestampAgo: '5 hours ago',
+        caption: 'Morning HIIT session completed! 45 Mins of non-stop cardio energy. Loved the recovery smoothie afterwards! 🥤✨',
+        postImageUrl: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?q=80&w=600',
+        likesCount: 52,
+        commentsCount: 8,
         isLikedByMe: false,
+        userBadge: '🥈 Iron Legend',
       ),
     ];
   }
