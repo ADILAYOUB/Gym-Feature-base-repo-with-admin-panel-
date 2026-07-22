@@ -15,7 +15,7 @@ void main() async {
   globalOnWorkoutSelected = (context, workout) {
     ActiveWorkoutView.start(context, workout);
   };
-  
+
   // Try initializing Firebase
   try {
     await Firebase.initializeApp();
@@ -39,7 +39,7 @@ void main() async {
 }
 
 class GymApp extends ConsumerWidget {
-  const GymApp({Key? key}) : super(key: key);
+  const GymApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -49,7 +49,7 @@ class GymApp extends ConsumerWidget {
     return themeConfigAsync.when(
       data: (config) => _buildAppWithConfig(config),
       loading: () => _buildAppWithConfig(ThemeConfig.fallback()),
-      error: (_, __) => _buildAppWithConfig(ThemeConfig.fallback()),
+      error: (_, _) => _buildAppWithConfig(ThemeConfig.fallback()),
     );
   }
 

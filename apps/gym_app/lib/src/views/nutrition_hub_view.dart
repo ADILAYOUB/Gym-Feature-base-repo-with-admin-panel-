@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:data/data.dart';
-import 'package:domain/domain.dart';
 
 class NutritionHubView extends ConsumerStatefulWidget {
   const NutritionHubView({Key? key}) : super(key: key);
@@ -166,7 +165,14 @@ class _NutritionHubViewState extends ConsumerState<NutritionHubView> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(plan.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                Expanded(
+                                  child: Text(
+                                    plan.title,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   decoration: BoxDecoration(color: theme.colorScheme.primary.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
@@ -182,13 +188,20 @@ class _NutritionHubViewState extends ConsumerState<NutritionHubView> {
                               const Divider(height: 20),
                               ...plan.meals.map((m) => Padding(
                                     padding: const EdgeInsets.symmetric(vertical: 2.0),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text('${m.time}: ${m.name}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                                        Text('${m.calories} kcal', style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                                      ],
-                                    ),
+                                     child: Row(
+                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                       children: [
+                                         Expanded(
+                                           child: Text(
+                                             '${m.time}: ${m.name}',
+                                             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                                             overflow: TextOverflow.ellipsis,
+                                           ),
+                                         ),
+                                         const SizedBox(width: 8),
+                                         Text('${m.calories} kcal', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                                       ],
+                                     ),
                                   )),
                             ],
                           ],

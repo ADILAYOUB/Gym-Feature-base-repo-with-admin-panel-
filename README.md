@@ -1,6 +1,59 @@
 # FitFlow - Gym Training Pro
 
-FitFlow is a comprehensive fitness and gym management application built with Flutter. It utilizes a modular, multi-package architecture to separate concerns, making the codebase scalable and maintainable. It includes an integrated admin dashboard, server-driven UI capabilities, and leverages Firebase for robust backend services.
+FitFlow is a comprehensive fitness and gym management application built with Flutter. It utilizes a modular, multi-package architecture to separate concerns, making the codebase scalable and maintainable. It includes an integrated mobile app for members, an executive web admin dashboard, server-driven UI capabilities, and leverages Firebase for robust backend services.
+
+---
+
+## 📱 Mobile App Showcase
+
+Here is a detailed walkthrough of the **FitFlow Mobile Application** screens along with their key features:
+
+### 1. 🏠 Home Feed & Server-Driven UI (SDUI)
+![Home Feed & SDUI](screenshots/app/home_sdui_feed.png)
+* **Title**: Dynamic Home Feed & Gemini AI Coach
+* **Description**: Features dynamic Server-Driven UI (SDUI) components, personalized Gemini AI readiness scores, hero banner carousels, target gender filters (*Men*, *Women*, *Children*), and recommended workout cards.
+
+---
+
+### 2. 🏋️‍♂️ My Saved Workouts Hub
+![My Saved Workouts](screenshots/app/my_workouts_hub.png)
+* **Title**: Member Routine & Saved Workouts Dashboard
+* **Description**: Allows users to manage their active workout schedules, track completed session history, view workout durations, and launch scheduled routines with one tap.
+
+---
+
+### 3. 🥗 Nutrition Hub & Macro Tracker
+![Nutrition Hub & Macro Tracker](screenshots/app/nutrition_macro_tracker.png)
+* **Title**: Daily Calories, Macro Breakdown & Hydration Log
+* **Description**: Displays real-time calorie progress rings, macro target bars (*Protein*, *Carbs*, *Fats*), an interactive **+250 mL Hydration Tracker**, and categorized diet plans tailored for Men, Women, and Children.
+
+---
+
+### 4. 📝 Active Workout Execution & Set Logger
+![Active Workout Execution](screenshots/app/active_workout_logging.png)
+* **Title**: Live Workout Logging & Rep Tracker
+* **Description**: Interactive workout tracking interface with live session timer, exercise list (*Push-ups*, *Dumbbell Bench Press*, *Tricep Dips*), set weight & rep inputs, completion checkboxes, and instant finish & save controls.
+
+---
+
+### 5. ⏱️ Rest Interval & Set Completion
+![Rest Interval & Set Completion](screenshots/app/rest_timer_interval.png)
+* **Title**: Automated Rest Timer & Set Checkoff
+* **Description**: Displays automated rest countdown intervals between exercise sets with a quick *"Skip Rest"* option, helping athletes optimize rest periods for hypertrophy and strength gains.
+
+---
+
+### 6. ℹ️ Workout Details & Included Exercises Modal
+![Workout Overview Modal](screenshots/app/workout_overview_modal.png)
+* **Title**: Exercise Overview & Routine Inspector
+* **Description**: Detail modal showing target exercise categories, estimated duration, difficulty rating badge (*Intermediate*), included exercise breakdown, and a prominent *"Start Active Workout"* launch button.
+
+---
+
+### 7. 💳 Holographic Digital Gym Pass
+![Holographic Digital Gym Pass](screenshots/app/digital_gym_pass.png)
+* **Title**: Metallic VIP Access Card & Contactless Turnstile QR Check-in
+* **Description**: Ultra-premium metallic membership pass with interactive 3D card flip animation, EMV chip, tier badge (*Gold Membership*), Apple/Google Wallet integration button, and a turnstile gate QR scanner code for contactless gym entrance check-in.
 
 ---
 
