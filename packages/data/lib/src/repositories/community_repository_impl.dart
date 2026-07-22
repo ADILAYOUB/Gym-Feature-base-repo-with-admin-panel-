@@ -168,15 +168,14 @@ class CommunityRepositoryImpl implements CommunityRepository {
       final nextCount = isLiked ? currentLikes - 1 : currentLikes + 1;
       _localPosts[idx] = SocialPost(
         id: old.id,
-        userName: old.userName,
-        userAvatar: old.userAvatar,
-        timestampAgo: old.timestampAgo,
+        authorName: old.authorName,
+        authorAvatar: old.authorAvatar,
+        postedTimeAgo: old.postedTimeAgo,
+        workoutTitle: old.workoutTitle,
+        metricsText: old.metricsText,
         caption: old.caption,
-        postImageUrl: old.postImageUrl,
         likesCount: nextCount > 0 ? nextCount : 0,
-        commentsCount: old.commentsCount,
         isLikedByMe: !isLiked,
-        userBadge: old.userBadge,
       );
       _postController.add(List<SocialPost>.from(_localPosts));
     }
@@ -197,15 +196,14 @@ class CommunityRepositoryImpl implements CommunityRepository {
   Future<void> createSocialPost(SocialPost post) async {
     final newPost = SocialPost(
       id: post.id.isEmpty ? 'p-${DateTime.now().millisecondsSinceEpoch}' : post.id,
-      userName: post.userName,
-      userAvatar: post.userAvatar,
-      timestampAgo: 'Just now',
+      authorName: post.authorName,
+      authorAvatar: post.authorAvatar,
+      postedTimeAgo: 'Just now',
+      workoutTitle: post.workoutTitle,
+      metricsText: post.metricsText,
       caption: post.caption,
-      postImageUrl: post.postImageUrl,
       likesCount: post.likesCount,
-      commentsCount: post.commentsCount,
       isLikedByMe: post.isLikedByMe,
-      userBadge: post.userBadge,
     );
 
     _localPosts.insert(0, newPost);
@@ -264,27 +262,25 @@ class CommunityRepositoryImpl implements CommunityRepository {
     return const [
       SocialPost(
         id: 'p1',
-        userName: 'Alex Rivera',
-        userAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-        timestampAgo: '2 hours ago',
+        authorName: 'Alex Rivera',
+        authorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
+        postedTimeAgo: '2 hours ago',
+        workoutTitle: 'Men Upper Body Strength',
+        metricsText: '45 Mins • 3,450 KG • 420 Kcal',
         caption: 'Hit a new PR today on Deadlifts! 220KG for 3 smooth reps. Hard work in FitFlow routine paying off! 🔥💪',
-        postImageUrl: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=600',
         likesCount: 34,
-        commentsCount: 12,
         isLikedByMe: true,
-        userBadge: '🏆 Gym Champion',
       ),
       SocialPost(
         id: 'p2',
-        userName: 'Sophia Chen',
-        userAvatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=200',
-        timestampAgo: '5 hours ago',
+        authorName: 'Sophia Chen',
+        authorAvatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=200',
+        postedTimeAgo: '5 hours ago',
+        workoutTitle: 'Women Toned Core & Glutes',
+        metricsText: '35 Mins • 1,800 KG • 310 Kcal',
         caption: 'Morning HIIT session completed! 45 Mins of non-stop cardio energy. Loved the recovery smoothie afterwards! 🥤✨',
-        postImageUrl: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?q=80&w=600',
         likesCount: 52,
-        commentsCount: 8,
         isLikedByMe: false,
-        userBadge: '🥈 Iron Legend',
       ),
     ];
   }
