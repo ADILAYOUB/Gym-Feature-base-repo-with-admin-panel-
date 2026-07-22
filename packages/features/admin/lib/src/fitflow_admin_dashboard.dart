@@ -46,6 +46,45 @@ class _FitflowAdminDashboardState extends State<FitflowAdminDashboard> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    if (screenWidth < 900) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF161722),
+        body: Center(
+          child: AlertDialog(
+            backgroundColor: const Color(0xFF242533),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.desktop_windows, color: Color(0xFFFF5500)),
+                SizedBox(width: 10),
+                Text(
+                  'Desktop View Required',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            content: const Text(
+              'it can be view in the web / desktop view only',
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () {},
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF5500),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                child: const Text('Got it'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFF161722),
       body: Row(
